@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>2D Shooter Platformer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #222;
+    }
+    canvas {
+      display: block;
+      background: #333;
+    }
+    #levelText {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 48px;
+      font-family: 'Silkscreen', monospace;
+    }
+    #overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+      text-align: center;
+      font-family: 'Silkscreen', monospace;
+    }
+    #overlay button {
+      font-family: 'Silkscreen', monospace;
+      font-size: 28px;
+      background: #444;
+      color: white;
+      border: 3px solid white;
+      padding: 10px 20px;
+      margin: 10px;
+      cursor: pointer;
+    }
+    #overlay button:hover {
+      background: #666;
+    }
+  </style>
+</head>
+<body>
+<div id="levelText">Level 1</div>
+<div id="overlay">
+  <div id="message" style="color:white;font-size:48px;margin-bottom:20px;"></div>
+  <button id="respawnBtn">Respawn</button>
+  <button id="nextBtn">Next Level</button>
+</div>
+<canvas id="game"></canvas>
+<script>
+const canvas = document.getElementById("game")
+const ctx = canvas.getContext("2d")
+canvas.width = window.innerWidth
+canvas.height = window.innerHeight
+
+const keys = {}
+document.addEventListener("keydown", e => keys[e.code] = true)
+document.addEventListener("keyup", e => keys[e.code] = false)
+
+class Player {
+  constructor() {
+    this.w = 40
+    this.h = 40
+    this.x = 100
+    this.y = canvas.height - 200
+    this.vx = 0
+    this.vy = 0
+    this.speed = 5
+    this.jumpPower = -15
+    this.onGround = false
+  }
+  resetPos(){
+    this.x = 100
+    this.y = canvas.height - 200
+    this.vx = 0
+    this.vy = 0
+  }
+  update() {
+    this.vy += 0.8
+    if (keys["ArrowLeft"] || keys["KeyA"]) this.vx = -this.speed
+    else if (keys["ArrowRight"] || keys["KeyD"]) this.vx = this.speed
+    else this.vx = 0
+    if ((keys["ArrowUp"] || keys["Space"] || keys["KeyW"]) && this.onGround) {
+      this.vy = this.jumpPower
+      this.onGround = false
+    }
+    this.x += this.vx
+    this.y += this.vy
+    if (this.y + this.h > canvas.height) {
+      this.y = canvas.height - this.h
+      this.vy = 0
+      this.onGround = true
+    }
+    obstacles.forEach(o=>{
+      if (this.x < o.x+o.w && this.x+this.w > o.x && this.y < o.y+o.h && this.y+this.h > o.y) {
+        if (this.vy>0) {
+          this.y = o.y-this.h
+          this.vy=0
+          this.onGround=true
+        }
+      }
+    })
+  }
+  draw() {
+    ctx.fillStyle = "blue"
+    ctx.fillRect(this.x,this.y,this.w,this.h)
+  }
+}
+
+class Enemy {
+  constructor(x,y,shooter=false) {
+    this.x=x
+    this.y=y
+    this.w=40
+    this.h=40
+    this.shooter=shooter
+    this.shootTimer=0
+  }
+  update() {
+    if(this.shooter){
+      this.shootTimer++
+      if(this.shootTimer>160){ // slower shooting
+        this.shootTimer=0
+        enemyBullets.push(new Bullet(this.x+this.w/2,this.y+this.h/2,player.x,player.y,3,"orange"))
+      }
+    }
+  }
+  draw() {
+    ctx.fillStyle=this.shooter?"purple":"red"
+    ctx.fillRect(this.x,this.y,this.w,this.h)
+  }
+}
+
+class Obstacle {
+  constructor(x,y,w,h) {
+    this.x=x
+    this.y=y
+    this.w=w
+    this.h=h
+  }
+  draw() {
+    ctx.fillStyle="gray"
+    ctx.fillRect(this.x,this.y,this.w,this.h)
+  }
+}
+
+class Bullet {
+  constructor(x,y,tx,ty,speed=10,color="yellow") {
+    this.x=x
+    this.y=y
+    this.w=10
+    this.h=5
+    this.color=color
+    const angle=Math.atan2(ty-y,tx-x)
+    this.vx=Math.cos(angle)*speed
+    this.vy=Math.sin(angle)*speed
+    this.dead=false
+  }
+  update() {
+    this.x+=this.vx
+    this.y+=this.vy
+    for(let o of obstacles){
+      if(this.x < o.x+o.w && this.x+this.w > o.x && this.y < o.y+o.h && this.y+this.h > o.y){
+        this.dead=true
+      }
+    }
+  }
+  draw() {
+    ctx.fillStyle=this.color
+    ctx.fillRect(this.x,this.y,this.w,this.h)
+  }
+}
+
+const player=new Player()
+let enemies=[]
+let obstacles=[]
+let bullets=[]
+let enemyBullets=[]
+let currentLevel=0
+let gameOver=false
+
+const overlay=document.getElementById("overlay")
+const message=document.getElementById("message")
+const respawnBtn=document.getElementById("respawnBtn")
+const nextBtn=document.getElementById("nextBtn")
+
+respawnBtn.onclick=()=>{
+  overlay.style.display="none"
+  gameOver=false
+  loadLevel(currentLevel)
+}
+nextBtn.onclick=()=>{
+  overlay.style.display="none"
+  gameOver=false
+  currentLevel++
+  if(currentLevel<levels.length) loadLevel(currentLevel)
+  else document.getElementById("levelText").innerText="YOU WIN!"
+}
+
+document.addEventListener("click",e=>{
+  if(!gameOver){
+    bullets.push(new Bullet(player.x+player.w/2,player.y+player.h/2,e.clientX,e.clientY,10,"yellow"))
+  }
+})
+
+function endGame(msg,showNext=false){
+  gameOver=true
+  overlay.style.display="block"
+  message.innerText=msg
+  respawnBtn.style.display="inline-block"
+  nextBtn.style.display=showNext?"inline-block":"none"
+}
+
+const levels=[
+  { // 1
+    obstacles:[new Obstacle(300,canvas.height-100,200,40),new Obstacle(700,canvas.height-150,200,40)],
+    enemies:[new Enemy(600,canvas.height-80),new Enemy(900,canvas.height-200)]
+  },
+  { // 2
+    obstacles:[new Obstacle(200,canvas.height-120,150,40),new Obstacle(500,canvas.height-200,200,40),new Obstacle(800,canvas.height-100,150,40)],
+    enemies:[new Enemy(400,canvas.height-240,true),new Enemy(850,canvas.height-140)]
+  },
+  { // 3
+    obstacles:[new Obstacle(300,canvas.height-150,200,40),new Obstacle(700,canvas.height-250,250,40),new Obstacle(1100,canvas.height-150,200,40)],
+    enemies:[new Enemy(750,canvas.height-290,true),new Enemy(1150,canvas.height-190,true)]
+  },
+  { // 4
+    obstacles:[new Obstacle(250,canvas.height-100,150,40),new Obstacle(600,canvas.height-200,250,40),new Obstacle(1000,canvas.height-120,200,40)],
+    enemies:[new Enemy(650,canvas.height-240),new Enemy(1050,canvas.height-160,true)]
+  },
+  { // 5
+    obstacles:[new Obstacle(200,canvas.height-180,200,40),new Obstacle(500,canvas.height-280,200,40),new Obstacle(900,canvas.height-180,200,40)],
+    enemies:[new Enemy(220,canvas.height-220),new Enemy(950,canvas.height-220,true)]
+  },
+  { // 6
+    obstacles:[new Obstacle(300,canvas.height-100,200,40),new Obstacle(650,canvas.height-200,200,40),new Obstacle(1000,canvas.height-300,200,40)],
+    enemies:[new Enemy(700,canvas.height-240,true),new Enemy(1050,canvas.height-340)]
+  },
+  { // 7
+    obstacles:[new Obstacle(200,canvas.height-150,150,40),new Obstacle(500,canvas.height-250,200,40),new Obstacle(850,canvas.height-150,250,40)],
+    enemies:[new Enemy(520,canvas.height-290,true),new Enemy(870,canvas.height-190,true)]
+  },
+  { // 8
+    obstacles:[new Obstacle(250,canvas.height-100,150,40),new Obstacle(600,canvas.height-200,200,40),new Obstacle(1000,canvas.height-100,200,40)],
+    enemies:[new Enemy(630,canvas.height-240),new Enemy(1050,canvas.height-140,true)]
+  },
+  { // 9
+    obstacles:[new Obstacle(300,canvas.height-180,200,40),new Obstacle(700,canvas.height-260,200,40),new Obstacle(1100,canvas.height-180,200,40)],
+    enemies:[new Enemy(720,canvas.height-300,true),new Enemy(1150,canvas.height-220,true)]
+  },
+  { // 10
+    obstacles:[new Obstacle(200,canvas.height-120,200,40),new Obstacle(600,canvas.height-220,250,40),new Obstacle(1000,canvas.height-120,200,40)],
+    enemies:[new Enemy(650,canvas.height-260,true),new Enemy(1050,canvas.height-160,true)]
+  }
+]
+
+function loadLevel(n){
+  enemies=[...levels[n].enemies]
+  obstacles=[...levels[n].obstacles]
+  bullets=[]
+  enemyBullets=[]
+  document.getElementById("levelText").innerText="Level "+(n+1)
+  player.resetPos()
+}
+
+function gameLoop() {
+  ctx.clearRect(0,0,canvas.width,canvas.height)
+  if(!gameOver){
+    player.update()
+    player.draw()
+    for (let o of obstacles) o.draw()
+    for (let i=enemies.length-1;i>=0;i--) {
+      let enemy=enemies[i]
+      enemy.update()
+      enemy.draw()
+      if (player.x<enemy.x+enemy.w && player.x+player.w>enemy.x && player.y<enemy.y+enemy.h && player.y+player.h>enemy.y) {
+        endGame("You Died",false)
+      }
+      for (let j=bullets.length-1;j>=0;j--) {
+        let b=bullets[j]
+        if (b.x<b.w+enemy.x && b.x+b.w>enemy.x && b.y<enemy.y+enemy.h && b.y+b.h>enemy.y) {
+          enemies.splice(i,1)
+          bullets.splice(j,1)
+          break
+        }
+      }
+    }
+    for (let i=bullets.length-1;i>=0;i--) {
+      let b=bullets[i]
+      b.update()
+      b.draw()
+      if(b.dead || b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) bullets.splice(i,1)
+    }
+    for (let i=enemyBullets.length-1;i>=0;i--) {
+      let b=enemyBullets[i]
+      b.update()
+      b.draw()
+      if (b.x<player.x+player.w && b.x+b.w>player.x && b.y<player.y+player.h && b.y+b.h>player.y){
+        endGame("You Died",false)
+      }
+      if(b.dead || b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) enemyBullets.splice(i,1)
+    }
+    if(enemies.length===0){
+      if(currentLevel<levels.length-1){
+        endGame("Level Complete!",true)
+      } else {
+        document.getElementById("levelText").innerText="YOU WIN!"
+      }
+    }
+  }
+  requestAnimationFrame(gameLoop)
+}
+
+loadLevel(0)
+gameLoop()
+</script>
+</body>
+</html>
